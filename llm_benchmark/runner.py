@@ -135,7 +135,7 @@ class BenchmarkRunner:
         for model in models:
             label = model.label
             raw_reply = replies.get(label, "[No response captured]")
-            reply, signaled_end = self._extract_end_signal(raw_reply)
+            reply, signaled_end, ignored_end_signal = self._extract_end_signal(raw_reply)
             histories[label].append(ChatMessage(role="assistant", content=reply))
             loggers[label].write("examiner", reply, turn=turn)
             if signaled_end:
@@ -145,6 +145,12 @@ class BenchmarkRunner:
                     turn=turn,
                 )
                 ended_models.add(label)
+            elif ignored_end_signal:
+                loggers[label].write(
+                    "system-session-note",
+                    "Ignored END_TASK signal because reply still contains a question.",
+                    turn=turn,
+                )
 
             print(f"[{label}]\n{reply}\n")
             if signaled_end:
@@ -152,9 +158,15 @@ class BenchmarkRunner:
         return ended_models
 
     @staticmethod
-    def _extract_end_signal(text: str) -> tuple[str, bool]:
-        signaled_end = bool(END_TASK_SIGNAL_PATTERN.search(text))
+    def _extract_end_signal(text: str) -> tuple[str, bool, bool]:
+        raw_signal = bool(END_TASK_SIGNAL_PATTERN.search(text))
         cleaned_text = END_TASK_SIGNAL_PATTERN.sub("", text).strip()
-        if signaled_end and not cleaned_text:
+        if raw_signal and not cleaned_text:
             cleaned_text = "[Task completed]"
-        return cleaned_text, signaled_end
+        accepted_signal = raw_signal and not BenchmarkRunner._is_question_turn(cleaned_text)
+        ignored_signal = raw_signal and not accepted_signal
+        return cleaned_text, accepted_signal, ignored_signal
+
+    @staticmethod
+    def _is_question_turn(text: str) -> bool:
+        return "?" in text or "？" in text
