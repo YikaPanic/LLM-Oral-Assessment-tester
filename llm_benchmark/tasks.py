@@ -24,6 +24,8 @@ Conversation pacing:
 Wrap-up guidance:
 - When the student has adequately addressed the main points of the task topic, suggest wrapping up. For example: "It sounds like we've covered the key points - would you like to summarise your thoughts, or is there anything else you'd like to add?"
 - Do not force an ending; only suggest it when the conversation goals appear to have been met.
+- When you decide the task should end, finish your final natural-language reply first, then output a new line containing exactly: [[END_TASK]]
+- Only output [[END_TASK]] when you genuinely intend to end the task.
 
 Strict rules:
 - NEVER correct the student's grammar, pronunciation, or vocabulary.
@@ -38,7 +40,7 @@ class SpeakingTask:
     description: str
     starter_instruction: str
     system_prompt: str
-    max_turns: int = 8
+    max_turns: int = 30
 
 
 TASKS: list[SpeakingTask] = [
@@ -62,7 +64,7 @@ TASKS: list[SpeakingTask] = [
             "(3) questionnaire feasibility. Ask only one question at a time. If candidate gives "
             "convincing reasons, gradually agree and move toward a practical wrap-up (e.g., next step)."
         ),
-        max_turns=8,
+        max_turns=30,
     ),
     SpeakingTask(
         task_id="dela_task2_peer_challenge_roleplay",
@@ -82,7 +84,7 @@ TASKS: list[SpeakingTask] = [
             "Do not decide everything yourself. Prompt the candidate to contribute, ask one question per "
             "turn, and keep each turn concise."
         ),
-        max_turns=8,
+        max_turns=30,
     ),
     SpeakingTask(
         task_id="dela_task3_admin_interaction",
@@ -102,7 +104,7 @@ TASKS: list[SpeakingTask] = [
             "not instantly accommodating; require clarification before confirming next steps. Keep turns "
             "short and ask one question at a time."
         ),
-        max_turns=8,
+        max_turns=30,
     ),
     SpeakingTask(
         task_id="dela_task4_chart_description",
@@ -121,7 +123,7 @@ TASKS: list[SpeakingTask] = [
             "presentation style. Follow-up prompts should target interpretation (peak, decline, possible "
             "reasons, implications), one question at a time. Keep turns concise."
         ),
-        max_turns=6,
+        max_turns=30,
     ),
     SpeakingTask(
         task_id="dela_task5_lecture_discussion",
@@ -141,7 +143,7 @@ TASKS: list[SpeakingTask] = [
             "justify their position. Keep interaction concise, natural, and focused on speaking production. "
             "Use one clear prompt per turn."
         ),
-        max_turns=9,
+        max_turns=30,
     ),
 ]
 

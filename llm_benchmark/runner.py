@@ -9,6 +9,8 @@ from llm_benchmark.messages import ChatMessage
 from llm_benchmark.models.base import ModelAdapter
 from llm_benchmark.tasks import DEFAULT_ASSESSMENT_PROMPT, SpeakingTask
 
+END_TASK_SIGNAL = "[[END_TASK]]"
+
 
 class BenchmarkRunner:
     def __init__(self, models: list[ModelAdapter], logs_root: Path) -> None:
@@ -36,6 +38,7 @@ class BenchmarkRunner:
             ]
             for model in self.models
         }
+        active_models: dict[str, ModelAdapter] = {model.label: model for model in self.models}
 
         print(f"\nTask: {task.title}")
         print(task.description)
@@ -50,11 +53,18 @@ class BenchmarkRunner:
             loggers[model.label].write("system-bootstrap", task.starter_instruction, turn="0")
 
         print("Examiner opening turn (parallel model generation)...\n")
-        opening = self._generate_parallel(histories)
-        self._record_and_print(opening, histories, loggers, turn=0)
+        current_models = list(active_models.values())
+        opening = self._generate_parallel(histories, current_models)
+        ended = self._record_and_print(opening, histories, loggers, turn=0, models=current_models)
+        for label in ended:
+            active_models.pop(label, None)
+        if not active_models:
+            print("All models signaled task completion.")
+            print(f"\nLogs saved to: {session_dir}")
+            return
 
         turn = 1
-        while turn <= total_turns:
+        while turn <= total_turns and active_models:
             user_text = input(f"Candidate (turn {turn})> ").strip()
             if user_text.lower() in {"/quit", "quit", "exit"}:
                 print("\nSession ended by user.")
@@ -63,25 +73,39 @@ class BenchmarkRunner:
                 print("Please enter a response or /quit.")
                 continue
 
-            for model in self.models:
+            current_models = list(active_models.values())
+            for model in current_models:
                 histories[model.label].append(ChatMessage(role="user", content=user_text))
                 loggers[model.label].write("candidate", user_text, turn=turn)
 
-            model_replies = self._generate_parallel(histories)
-            self._record_and_print(model_replies, histories, loggers, turn=turn)
+            model_replies = self._generate_parallel(histories, current_models)
+            ended = self._record_and_print(
+                model_replies,
+                histories,
+                loggers,
+                turn=turn,
+                models=current_models,
+            )
+            for label in ended:
+                active_models.pop(label, None)
+            if not active_models:
+                print("All models signaled task completion.")
+                break
             turn += 1
 
         print(f"\nLogs saved to: {session_dir}")
 
     def _generate_parallel(
-        self, histories: dict[str, list[ChatMessage]]
+        self, histories: dict[str, list[ChatMessage]], models: list[ModelAdapter]
     ) -> dict[str, str]:
         responses: dict[str, str] = {}
+        if not models:
+            return responses
 
-        with ThreadPoolExecutor(max_workers=len(self.models)) as pool:
+        with ThreadPoolExecutor(max_workers=len(models)) as pool:
             futures = {
                 pool.submit(model.generate, list(histories[model.label])): model.label
-                for model in self.models
+                for model in models
             }
 
             for future in as_completed(futures):
@@ -99,11 +123,39 @@ class BenchmarkRunner:
         histories: dict[str, list[ChatMessage]],
         loggers: dict[str, ConversationLogger],
         turn: int,
-    ) -> None:
-        for model in self.models:
+        models: list[ModelAdapter],
+    ) -> set[str]:
+        ended_models: set[str] = set()
+        for model in models:
             label = model.label
-            reply = replies.get(label, "[No response captured]")
+            raw_reply = replies.get(label, "[No response captured]")
+            reply, signaled_end = self._extract_end_signal(raw_reply)
             histories[label].append(ChatMessage(role="assistant", content=reply))
             loggers[label].write("examiner", reply, turn=turn)
+            if signaled_end:
+                loggers[label].write(
+                    "system-session-end",
+                    f"Model emitted end signal: {END_TASK_SIGNAL}",
+                    turn=turn,
+                )
+                ended_models.add(label)
 
             print(f"[{label}]\n{reply}\n")
+            if signaled_end:
+                print(f"[{label}] signaled task completion.\n")
+        return ended_models
+
+    @staticmethod
+    def _extract_end_signal(text: str) -> tuple[str, bool]:
+        signaled_end = False
+        cleaned_lines: list[str] = []
+        for line in text.splitlines():
+            if line.strip() == END_TASK_SIGNAL:
+                signaled_end = True
+                continue
+            cleaned_lines.append(line)
+
+        cleaned_text = "\n".join(cleaned_lines).strip()
+        if signaled_end and not cleaned_text:
+            cleaned_text = "[Task completed]"
+        return cleaned_text, signaled_end
