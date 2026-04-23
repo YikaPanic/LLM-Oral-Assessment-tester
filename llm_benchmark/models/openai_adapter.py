@@ -26,13 +26,16 @@ class OpenAIAdapter(ModelAdapter):
         self.max_output_tokens = max_output_tokens
 
     def generate(self, messages: Sequence[ChatMessage]) -> str:
-        input_messages = [
-            {
-                "role": message.role,
-                "content": [{"type": "input_text", "text": message.content}],
-            }
-            for message in messages
-        ]
+        input_messages = []
+        for message in messages:
+            # In Responses API history, assistant content must be "output_text".
+            content_type = "output_text" if message.role == "assistant" else "input_text"
+            input_messages.append(
+                {
+                    "role": message.role,
+                    "content": [{"type": content_type, "text": message.content}],
+                }
+            )
 
         response = self.client.responses.create(
             model=self.model_name,
