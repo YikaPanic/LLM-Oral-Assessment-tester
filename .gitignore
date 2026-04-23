@@ -1,0 +1,7 @@
+.venv/
+__pycache__/
+*.pyc
+logs/
+
+# Keep local secrets out of git history
+config.yaml
