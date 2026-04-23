@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import re
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from datetime import datetime
 from pathlib import Path
@@ -10,6 +11,7 @@ from llm_benchmark.models.base import ModelAdapter
 from llm_benchmark.tasks import DEFAULT_ASSESSMENT_PROMPT, SpeakingTask
 
 END_TASK_SIGNAL = "[[END_TASK]]"
+END_TASK_SIGNAL_PATTERN = re.compile(re.escape(END_TASK_SIGNAL))
 
 
 class BenchmarkRunner:
@@ -20,7 +22,11 @@ class BenchmarkRunner:
         self.models = models
         self.logs_root = logs_root
 
-    def run(self, task: SpeakingTask, max_turns: int | None = None) -> None:
+    def run(
+        self,
+        task: SpeakingTask,
+        max_turns: int | None = None,
+    ) -> None:
         total_turns = max_turns if max_turns is not None else task.max_turns
         session_stamp = datetime.now().strftime("%Y%m%d_%H%M%S")
         session_dir = self.logs_root / f"{session_stamp}_{task.task_id}"
@@ -147,15 +153,8 @@ class BenchmarkRunner:
 
     @staticmethod
     def _extract_end_signal(text: str) -> tuple[str, bool]:
-        signaled_end = False
-        cleaned_lines: list[str] = []
-        for line in text.splitlines():
-            if line.strip() == END_TASK_SIGNAL:
-                signaled_end = True
-                continue
-            cleaned_lines.append(line)
-
-        cleaned_text = "\n".join(cleaned_lines).strip()
+        signaled_end = bool(END_TASK_SIGNAL_PATTERN.search(text))
+        cleaned_text = END_TASK_SIGNAL_PATTERN.sub("", text).strip()
         if signaled_end and not cleaned_text:
             cleaned_text = "[Task completed]"
         return cleaned_text, signaled_end
