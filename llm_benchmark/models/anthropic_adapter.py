@@ -13,6 +13,7 @@ class AnthropicAdapter(ModelAdapter):
         model_name: str,
         temperature: float,
         max_output_tokens: int,
+        base_url: str | None = None,
     ) -> None:
         super().__init__(provider="anthropic", model_name=model_name)
         try:
@@ -20,7 +21,10 @@ class AnthropicAdapter(ModelAdapter):
         except ImportError as exc:
             raise ImportError("Missing dependency 'anthropic'. Install requirements first.") from exc
 
-        self.client = Anthropic(api_key=api_key)
+        client_kwargs: dict[str, str] = {"api_key": api_key}
+        if base_url and base_url.strip():
+            client_kwargs["base_url"] = self._normalize_base_url(base_url.strip())
+        self.client = Anthropic(**client_kwargs)
         self.temperature = temperature
         self.max_output_tokens = max_output_tokens
 
@@ -54,3 +58,14 @@ class AnthropicAdapter(ModelAdapter):
             return "\n".join(text_blocks).strip()
 
         return "[No response text returned by Anthropic API]"
+
+    @staticmethod
+    def _normalize_base_url(base_url: str) -> str:
+        """
+        Anthropic SDK appends `/v1/messages` internally.
+        Some gateway URLs are provided as `.../v1`, which would become `/v1/v1/messages`.
+        """
+        normalized = base_url.rstrip("/")
+        if normalized.endswith("/v1"):
+            normalized = normalized[:-3]
+        return normalized

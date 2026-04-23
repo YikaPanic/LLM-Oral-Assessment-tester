@@ -49,6 +49,7 @@ def _build_adapters(config: AppConfig, requested: set[str]) -> list[ModelAdapter
                 model_name=config.anthropic_model,
                 temperature=config.temperature,
                 max_output_tokens=config.max_output_tokens,
+                base_url=config.anthropic_base_url or None,
             )
         )
 

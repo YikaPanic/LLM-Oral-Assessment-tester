@@ -32,6 +32,7 @@ cp config.example.yaml config.yaml
 ```
 
 You can also use environment variables.
+If you use a proxy/gateway for Anthropic, set `anthropic_base_url` (or `ANTHROPIC_BASE_URL`).
 
 ## Usage
 
@@ -67,6 +68,7 @@ Logs are written under `logs/<timestamp>_<task_id>/` with one `.txt` file per mo
 - `OPENAI_API_KEY`
 - `GEMINI_API_KEY` or `GOOGLE_API_KEY`
 - `ANTHROPIC_API_KEY`
+- `ANTHROPIC_BASE_URL`
 - `OPENAI_MODEL`
 - `GEMINI_MODEL`
 - `ANTHROPIC_MODEL`

@@ -13,6 +13,7 @@ class AppConfig:
     openai_api_key: str = ""
     gemini_api_key: str = ""
     anthropic_api_key: str = ""
+    anthropic_base_url: str = ""
     openai_model: str = "gpt-5.4-nano"
     gemini_model: str = "gemini-3.1-flash-lite-preview"
     anthropic_model: str = "claude-haiku-4.5"
@@ -44,6 +45,9 @@ class AppConfig:
             ).strip(),
             anthropic_api_key=str(
                 pick("anthropic_api_key", "ANTHROPIC_API_KEY", default="")
+            ).strip(),
+            anthropic_base_url=str(
+                pick("anthropic_base_url", "ANTHROPIC_BASE_URL", default="")
             ).strip(),
             openai_model=str(pick("openai_model", "OPENAI_MODEL", default="gpt-5.4-nano")),
             gemini_model=str(
