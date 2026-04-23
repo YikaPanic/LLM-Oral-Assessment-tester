@@ -12,6 +12,19 @@ from llm_benchmark.tasks import DEFAULT_ASSESSMENT_PROMPT, SpeakingTask
 
 END_TASK_SIGNAL = "[[END_TASK]]"
 END_TASK_SIGNAL_PATTERN = re.compile(re.escape(END_TASK_SIGNAL))
+ROLE_MIX_PATTERN = re.compile(
+    r"(^|\n)\s*(candidate|student|user|test taker)\s*[:：]",
+    re.IGNORECASE,
+)
+QUESTION_LIKE_PATTERN = re.compile(
+    r"\b("
+    r"would you|could you|can you|do you|are you|will you|"
+    r"should we|shall we|"
+    r"what\b|why\b|how\b|when\b|where\b|which\b|who\b|"
+    r"please (share|summarise|summarize|tell|confirm|choose|explain|list|describe)"
+    r")",
+    re.IGNORECASE,
+)
 
 
 class BenchmarkRunner:
@@ -135,7 +148,9 @@ class BenchmarkRunner:
         for model in models:
             label = model.label
             raw_reply = replies.get(label, "[No response captured]")
-            reply, signaled_end, ignored_end_signal = self._extract_end_signal(raw_reply)
+            reply, signaled_end, ignored_end_signal, role_mix_detected = self._extract_end_signal(
+                raw_reply
+            )
             histories[label].append(ChatMessage(role="assistant", content=reply))
             loggers[label].write("examiner", reply, turn=turn)
             if signaled_end:
@@ -151,6 +166,12 @@ class BenchmarkRunner:
                     "Ignored END_TASK signal because reply still contains a question.",
                     turn=turn,
                 )
+            if role_mix_detected:
+                loggers[label].write(
+                    "system-session-note",
+                    "Detected mixed-role output (candidate/student text) and truncated reply.",
+                    turn=turn,
+                )
 
             print(f"[{label}]\n{reply}\n")
             if signaled_end:
@@ -158,15 +179,40 @@ class BenchmarkRunner:
         return ended_models
 
     @staticmethod
-    def _extract_end_signal(text: str) -> tuple[str, bool, bool]:
+    def _extract_end_signal(text: str) -> tuple[str, bool, bool, bool]:
         raw_signal = bool(END_TASK_SIGNAL_PATTERN.search(text))
-        cleaned_text = END_TASK_SIGNAL_PATTERN.sub("", text).strip()
+        cleaned_text = END_TASK_SIGNAL_PATTERN.sub("", text)
+        role_mix_detected = False
+
+        role_mix_match = ROLE_MIX_PATTERN.search(cleaned_text)
+        if role_mix_match:
+            role_mix_detected = True
+            cleaned_text = cleaned_text[: role_mix_match.start()]
+
+        cleaned_text = cleaned_text.strip()
         if raw_signal and not cleaned_text:
             cleaned_text = "[Task completed]"
-        accepted_signal = raw_signal and not BenchmarkRunner._is_question_turn(cleaned_text)
+        if role_mix_detected and not cleaned_text:
+            cleaned_text = "[Reply truncated: mixed-role output]"
+
+        accepted_signal = (
+            raw_signal
+            and not role_mix_detected
+            and not BenchmarkRunner._is_question_turn(cleaned_text)
+        )
         ignored_signal = raw_signal and not accepted_signal
-        return cleaned_text, accepted_signal, ignored_signal
+        return cleaned_text, accepted_signal, ignored_signal, role_mix_detected
 
     @staticmethod
     def _is_question_turn(text: str) -> bool:
-        return "?" in text or "？" in text
+        stripped = text.strip()
+        if not stripped:
+            return False
+
+        if "?" in stripped or "？" in stripped:
+            return True
+
+        if stripped.endswith(":"):
+            return True
+
+        return bool(QUESTION_LIKE_PATTERN.search(stripped))
