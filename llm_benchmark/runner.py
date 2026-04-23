@@ -53,7 +53,8 @@ class BenchmarkRunner:
         opening = self._generate_parallel(histories)
         self._record_and_print(opening, histories, loggers, turn=0)
 
-        for turn in range(1, total_turns + 1):
+        turn = 1
+        while turn <= total_turns:
             user_text = input(f"Candidate (turn {turn})> ").strip()
             if user_text.lower() in {"/quit", "quit", "exit"}:
                 print("\nSession ended by user.")
@@ -68,6 +69,7 @@ class BenchmarkRunner:
 
             model_replies = self._generate_parallel(histories)
             self._record_and_print(model_replies, histories, loggers, turn=turn)
+            turn += 1
 
         print(f"\nLogs saved to: {session_dir}")
 
